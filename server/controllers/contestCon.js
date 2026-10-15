@@ -434,7 +434,7 @@ const submitFeedback = async (req, res, next) => {
         if (existing.status !== 'Completed') {
             return res.status(403).json({ success: false, error: 'Submit your test before leaving feedback' });
         }
-        return res.status(409).json({ success: false, error: 'Feedback has already been submitted' });
+        return res.status(409).json({ success: false, alreadySubmitted: true, error: 'Feedback has already been submitted' });
     } catch (error) {
         next(error);
     }
