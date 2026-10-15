@@ -423,7 +423,7 @@ const submitFeedback = async (req, res, next) => {
             status: 'Completed',
             feedback: { $exists: false },
         }, { $set: { feedback: { ...parsed.data, submittedAt: new Date() } } }, {
-            new: true,
+            returnDocument: 'after',
             runValidators: true,
         }).select('feedback');
 

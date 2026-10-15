@@ -1,6 +1,7 @@
 const Question = require('../models/Question');
 const Contest = require('../models/Contest');
 const Submission = require('../models/Submissions');
+const { isValidObjectId } = require('mongoose');
 const { connectDB } = require('../helpers/dbCon');
 const { getJudge, validateProblemConfig } = require("@pomelo/code-gen");
 const {
@@ -902,6 +903,9 @@ const importQuestions = async (req, res, next) => {
 
 const getAdminContestFeedback = async (req, res, next) => {
     try {
+        if (!isValidObjectId(req.params.id)) {
+            return res.status(400).json({ success: false, error: 'Invalid contest ID' });
+        }
         const contest = await Contest.findById(req.params.id).select('_id').lean();
         if (!contest) return res.status(404).json({ success: false, error: 'Contest not found' });
 

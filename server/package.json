@@ -5,6 +5,7 @@
     "start": "node dist/index.js",
     "dev": "nodemon index.js",
     "test": "node --require ts-node/register/transpile-only --test \"tests/**/*.test.js\" \"tests/**/*.test.ts\"",
+    "test:integration": "node --require ts-node/register/transpile-only --test tests/feedback.integration.ts",
     "clean": "rm -rf node_modules dist"
   },
   "dependencies": {
