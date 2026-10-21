@@ -906,7 +906,28 @@ const getAdminContestFeedback = async (req, res, next) => {
         if (!isValidObjectId(req.params.id)) {
             return res.status(400).json({ success: false, error: 'Invalid contest ID' });
         }
-        const contest = await Contest.findById(req.params.id).select('_id').lean();
+        const sorts = {
+            newest: { 'feedback.submittedAt': -1, _id: -1 },
+            oldest: { 'feedback.submittedAt': 1, _id: 1 },
+            'difficulty-high': { 'feedback.difficulty': -1, _id: -1 },
+            'difficulty-low': { 'feedback.difficulty': 1, _id: -1 },
+            'experience-high': { 'feedback.experience': -1, _id: -1 },
+            'experience-low': { 'feedback.experience': 1, _id: -1 },
+        };
+        const sort = req.query.sort || 'newest';
+        if (typeof sort !== 'string' || !Object.hasOwn(sorts, sort)) {
+            return res.status(400).json({ success: false, error: 'Invalid feedback sort order' });
+        }
+        const filters = {};
+        for (const metric of ['difficulty', 'experience']) {
+            const value = req.query[metric];
+            if (value === undefined || value === '') continue;
+            if (typeof value !== 'string' || !/^[1-5]$/.test(value)) {
+                return res.status(400).json({ success: false, error: 'Feedback filters must be ratings from 1 to 5' });
+            }
+            filters[`feedback.${metric}`] = Number(value);
+        }
+        const contest = await Contest.findById(req.params.id).select('_id title').lean();
         if (!contest) return res.status(404).json({ success: false, error: 'Contest not found' });
 
         const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -920,27 +941,33 @@ const getAdminContestFeedback = async (req, res, next) => {
                     difficulty: { $avg: '$feedback.difficulty' },
                     experience: { $avg: '$feedback.experience' },
                 } }],
-                comments: [
-                    { $match: { 'feedback.comment': { $type: 'string', $ne: '' } } },
-                    { $sort: { 'feedback.submittedAt': -1, _id: -1 } },
+                difficultyDistribution: [{ $group: { _id: '$feedback.difficulty', count: { $sum: 1 } } }],
+                experienceDistribution: [{ $group: { _id: '$feedback.experience', count: { $sum: 1 } } }],
+                reviews: [
+                    { $match: filters },
+                    { $sort: sorts[sort] },
                     { $skip: (page - 1) * limit },
                     { $limit: limit },
                     { $project: { feedback: 1 } },
                 ],
-                commentCount: [
-                    { $match: { 'feedback.comment': { $type: 'string', $ne: '' } } },
-                    { $count: 'total' },
-                ],
+                filteredCount: [{ $match: filters }, { $count: 'total' }],
             } },
         ]);
         const stats = result?.stats?.[0];
+        const distribution = (rows = []) => Array.from({ length: 5 }, (_, index) => ({
+            rating: index + 1,
+            count: rows.find(row => row._id === index + 1)?.count || 0,
+        }));
         return res.json({
             success: true,
+            title: contest.title,
             count: stats?.count || 0,
             averageDifficulty: stats?.difficulty ?? null,
             averageExperience: stats?.experience ?? null,
-            comments: result?.comments || [],
-            totalComments: result?.commentCount?.[0]?.total || 0,
+            difficultyDistribution: distribution(result?.difficultyDistribution),
+            experienceDistribution: distribution(result?.experienceDistribution),
+            reviews: result?.reviews || [],
+            totalReviews: result?.filteredCount?.[0]?.total || 0,
             page,
             limit,
         });

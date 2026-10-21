@@ -101,21 +101,21 @@ test('existing feedback is returned when revisiting the screen', async () => {
     assert.deepEqual(res.body.feedback, valid);
 });
 
-test('admin feedback returns whole-test averages and independently paginated comments', async () => {
+test('admin feedback returns whole-test averages and independently paginated reviews', async () => {
     mock.method(Contest, 'findById', () => query({ _id: contestId }));
     const aggregate = mock.method(Submission, 'aggregate', async () => [{
-        stats: [{ count: 12, difficulty: 3.5, experience: 4 }], comments: [], commentCount: [{ total: 11 }],
+        stats: [{ count: 12, difficulty: 3.5, experience: 4 }], reviews: [], filteredCount: [{ total: 11 }],
     }]);
     const req = { ...request(), query: { page: '2', limit: '10' } };
     const res = response();
     await getAdminContestFeedback(req, res, next);
     assert.equal(res.body.count, 12);
     assert.equal(res.body.averageDifficulty, 3.5);
-    assert.equal(res.body.totalComments, 11);
+    assert.equal(res.body.totalReviews, 11);
     const pipeline = aggregate.mock.calls[0].arguments[0] as any;
     assert.deepEqual(pipeline[0].$match, { contest: contestId, status: 'Completed', feedback: { $exists: true } });
-    assert.equal(pipeline[1].$facet.comments[2].$skip, 10);
-    assert.deepEqual(pipeline[1].$facet.comments.at(-1), { $project: { feedback: 1 } });
+    assert.equal(pipeline[1].$facet.reviews[2].$skip, 10);
+    assert.deepEqual(pipeline[1].$facet.reviews.at(-1), { $project: { feedback: 1 } });
 });
 
 test('admin feedback has an explicit empty state and bounds page sizes', async () => {
@@ -135,4 +135,27 @@ test('database errors reach the error handler', async () => {
     let caught: unknown;
     await submitFeedback(request(), response(), (value: unknown) => { caught = value; });
     assert.equal(caught, error);
+});
+
+test('feedback query rejects invalid rating filters and sort keys before querying the database', async () => {
+    const read = mock.method(Contest, 'findById', () => { throw new Error('Must not query'); });
+    for (const query of [{ difficulty: '0' }, { experience: '6' }, { difficulty: ['1', '2'] },
+        { experience: { $gt: 0 } }, { sort: 'constructor' }, { sort: ['oldest', 'newest'] }]) {
+        const res = response();
+        await getAdminContestFeedback({ ...request(), query }, res, next);
+        assert.equal(res.statusCode, 400);
+    }
+    assert.equal(read.mock.callCount(), 0);
+});
+
+test('distribution responses always include all five ratings, including zero counts', async () => {
+    mock.method(Contest, 'findById', () => query({ _id: contestId }));
+    mock.method(Submission, 'aggregate', async () => [{
+        stats: [{ count: 2, difficulty: 4, experience: 2 }],
+        difficultyDistribution: [{ _id: 4, count: 2 }], experienceDistribution: [{ _id: 2, count: 2 }],
+    }]);
+    const res = response();
+    await getAdminContestFeedback(request(), res, next);
+    assert.deepEqual(res.body.difficultyDistribution.map((row: any) => row.count), [0, 0, 0, 2, 0]);
+    assert.deepEqual(res.body.experienceDistribution.map((row: any) => row.rating), [1, 2, 3, 4, 5]);
 });

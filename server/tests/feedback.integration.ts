@@ -111,7 +111,7 @@ test('feedback HTTP authorization, persistence and aggregation', {
         assert.equal((await call('/code-quota', otherToken, {})).status, 429);
         assert.equal((await call(path, otherToken, { difficulty: 3, experience: 3 })).status, 409);
     });
-    await t.test('averages cover every response while comments paginate independently', async () => {
+    await t.test('averages cover every response while reviews paginate independently', async () => {
         await Submission.insertMany(Array.from({ length: 11 }, (_, i) => ({
             contest: contest._id, user: new mongoose.Types.ObjectId(), status: 'Completed',
             feedback: { difficulty: 3, experience: 3, comment: `Comment ${i}` },
@@ -121,12 +121,45 @@ test('feedback HTTP authorization, persistence and aggregation', {
         assert.equal(first.count, 13);
         assert.equal(first.averageDifficulty, 3);
         assert.equal(first.averageExperience, 3);
-        assert.equal(first.totalComments, 12);
-        assert.equal(first.comments.length, 10);
-        assert.equal(second.comments.length, 2);
+        assert.equal(first.totalReviews, 13);
+        assert.equal(first.reviews.length, 10);
+        assert.equal(second.reviews.length, 3);
         assert.equal(second.count, first.count);
-        assert.equal(new Set([...first.comments, ...second.comments].map(row => row._id)).size, 12);
-        assert.deepEqual(Object.keys(first.comments[0]).sort(), ['_id', 'feedback']);
+        assert.equal(new Set([...first.reviews, ...second.reviews].map(row => row._id)).size, 13);
+        assert.deepEqual(Object.keys(first.reviews[0]).sort(), ['_id', 'feedback']);
+    });
+    await t.test('distributions and averages remain global while rating filters combine and paginate', async () => {
+        const filtered = (await call(`${adminPath}?difficulty=3&experience=3&page=2&limit=10`, adminToken)).data;
+        assert.equal(filtered.count, 13);
+        assert.equal(filtered.totalReviews, 11);
+        assert.equal(filtered.reviews.length, 1);
+        assert.equal(filtered.reviews[0].feedback.difficulty, 3);
+        assert.deepEqual(filtered.difficultyDistribution.map((row: { count: number }) => row.count), [0, 1, 11, 1, 0]);
+        assert.deepEqual(filtered.experienceDistribution.map((row: { count: number }) => row.count), [0, 1, 11, 1, 0]);
+        const empty = (await call(`${adminPath}?difficulty=3&experience=4`, adminToken)).data;
+        assert.equal(empty.totalReviews, 0);
+        assert.equal(empty.reviews.length, 0);
+        assert.equal(empty.count, 13);
+    });
+    await t.test('reviews sort by either rating in both directions', async () => {
+        for (const [sort, field, expected] of [
+            ['difficulty-high', 'difficulty', 4], ['difficulty-low', 'difficulty', 2],
+            ['experience-high', 'experience', 4], ['experience-low', 'experience', 2],
+        ] as const) {
+            const result = await call(`${adminPath}?sort=${sort}`, adminToken);
+            assert.equal(result.status, 200);
+            assert.equal(result.data.reviews[0].feedback[field], expected);
+        }
+        for (const sort of ['newest', 'oldest']) {
+            const data = (await call(`${adminPath}?sort=${sort}&limit=100`, adminToken)).data;
+            const times = data.reviews.map((row: { feedback: { submittedAt: string } }) => new Date(row.feedback.submittedAt).getTime());
+            assert.deepEqual(times, [...times].sort((a, b) => sort === 'oldest' ? a - b : b - a));
+        }
+    });
+    await t.test('invalid filters and sort values return a client error', async () => {
+        for (const query of ['difficulty=0', 'experience=6', 'difficulty=1&difficulty=2', 'sort=constructor']) {
+            assert.equal((await call(`${adminPath}?${query}`, adminToken)).status, 400);
+        }
     });
     await t.test('closed tests still accept optional feedback from completed attempts', async () => {
         await Contest.updateOne({ _id: contest._id }, { $set: { status: 'ended', endTime: new Date(Date.now() - 1000) } });

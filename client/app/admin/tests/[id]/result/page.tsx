@@ -4,6 +4,7 @@ import {
     Users,
     Award,
     ExternalLink,
+    MessageSquare,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +23,6 @@ import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/ui/local-time";
 import ExportResultsButtons from "@/components/admin/test/export-results-buttons";
 import { Pagination } from "@/components/admin/pagination";
-import FeedbackSummary from "@/components/admin/test/feedback-summary";
 
 const RESULTS_PAGE_SIZE = 25;
 
@@ -82,7 +82,6 @@ export default async function AdminTestResultPage({
     const { id } = await params;
     const query = await searchParams;
     const page = Math.max(1, Number(query.page) || 1);
-    const feedbackPage = Math.max(1, parseInt(query.feedbackPage || '1', 10) || 1);
 
     const response: ResultsResponse = await fetchBackend(
         `/api/admin/tests/${id}/result?page=${page}&limit=${RESULTS_PAGE_SIZE}`
@@ -138,10 +137,11 @@ export default async function AdminTestResultPage({
                             </p>
                         </div>
                     </div>
-                    <ExportResultsButtons contestId={data.id} contestTitle={data.testName} />
+                    <div className="flex flex-wrap gap-3">
+                        <Button variant="outline" asChild><Link href={`/admin/tests/${data.id}/feedback`}><MessageSquare className="size-4" />View feedback</Link></Button>
+                        <ExportResultsButtons contestId={data.id} contestTitle={data.testName} />
+                    </div>
                 </header>
-
-                <FeedbackSummary testId={id} page={feedbackPage} />
 
                 <section className="space-y-6">
                     <div className="flex items-center justify-between">
