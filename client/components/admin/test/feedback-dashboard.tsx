@@ -115,7 +115,7 @@ export default async function FeedbackDashboard({
                   label: "Average difficulty",
                   value:
                     data.averageDifficulty === null
-                      ? "—"
+                      ? "N/A"
                       : `${data.averageDifficulty.toFixed(1)} / 5`,
                   help: "1 very easy · 5 very hard",
                 },
@@ -123,7 +123,7 @@ export default async function FeedbackDashboard({
                   label: "Average experience",
                   value:
                     data.averageExperience === null
-                      ? "—"
+                      ? "N/A"
                       : `${data.averageExperience.toFixed(1)} / 5`,
                   help: "1 poor · 5 excellent",
                 },
@@ -192,7 +192,7 @@ export default async function FeedbackDashboard({
                       <option value="">All ratings</option>
                       {labels.map((label, index) => (
                         <option key={label} value={index + 1}>
-                          {index + 1} — {label}
+                          {index + 1} · {label}
                         </option>
                       ))}
                     </select>
